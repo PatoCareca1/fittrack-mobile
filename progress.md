@@ -34,9 +34,10 @@ Infra:
 ## O que falta / decisões pendentes
 
 1. **Dados reais**: só auth consome o backend. Endpoints de vínculo profissional
-   (`/professional/links/accept/`, `/professional/assignments/`) passaram a existir
-   em 2026-07-02 — as telas "Aceitar Convite" e "Plano Atribuído" são as primeiras
-   candidatas à integração. Treinos, dieta, evolução, bioimpedância,
+   (2026-07-02) e de dieta completa (2026-07-03: `/diet/foods/?q=`,
+   `/diet/meal-plans/`, `/diet/meals/{id}/mark-done/`, atribuição de dieta) já
+   existem — "Aceitar Convite", "Plano Atribuído" e toda a aba Dieta têm API real
+   para consumir. Treinos, dieta, evolução, bioimpedância,
    profissionais e chat usam `lib/mock/mock_data.dart` (mesmo racional do painel web).
    Ao integrar, criar `data/domain` por feature mantendo os shapes do mock.
 2. ~~Endpoint de cadastro~~ **Resolvido (2026-07-02)**: contrato validado contra o

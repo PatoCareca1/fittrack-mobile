@@ -1,15 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../mock/mock_data.dart';
+import '../data.dart';
 
-class ProfileScreen extends StatelessWidget {
+const _goalLabels = {
+  'weight_loss': 'Emagrecimento',
+  'hypertrophy': 'Hipertrofia',
+  'maintenance': 'Manutenção',
+  'general_health': 'Saúde geral',
+};
+
+const _activityLabels = {
+  'sedentary': 'Sedentário',
+  'light': 'Leve',
+  'moderate': 'Moderado',
+  'intense': 'Intenso',
+  'very_intense': 'Atleta',
+};
+
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final meAsync = ref.watch(meProvider);
+    final me = meAsync.valueOrNull;
+    final initial =
+        (me?.firstName.isNotEmpty ?? false) ? me!.firstName[0].toUpperCase() : '?';
+
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -29,55 +50,47 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           Center(
-            child: Stack(children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.primaryDark]),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Text('L',
-                      style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.onPrimary)),
-                ),
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryDark]),
+                shape: BoxShape.circle,
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.background, width: 3),
-                  ),
-                  child:
-                      const Icon(Icons.edit, size: 14, color: AppColors.onAccent),
-                ),
+              child: Center(
+                child: Text(initial,
+                    style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onPrimary)),
               ),
-            ]),
+            ),
           ),
           const SizedBox(height: 12),
-          const Text(MockData.userName,
+          Text(me?.fullName ?? '...',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 3),
-          const Text(MockData.userEmail,
+          Text(me?.email ?? '',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+              style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-          const Row(children: [
-            _InfoChip(label: 'Objetivo', value: 'Hipertrofia', highlight: true),
-            SizedBox(width: 10),
-            _InfoChip(label: 'Nível', value: 'Intermediário'),
-            SizedBox(width: 10),
-            _InfoChip(label: 'Atividade', value: 'Ativo'),
+          Row(children: [
+            _InfoChip(
+                label: 'Objetivo',
+                value: _goalLabels[me?.profile.goal] ?? '—',
+                highlight: true),
+            const SizedBox(width: 10),
+            _InfoChip(
+                label: 'Altura',
+                value: me?.profile.heightCm == null
+                    ? '—'
+                    : '${me!.profile.heightCm} cm'),
+            const SizedBox(width: 10),
+            _InfoChip(
+                label: 'Atividade',
+                value: _activityLabels[me?.profile.activityLevel] ?? '—'),
           ]),
           const SizedBox(height: 22),
           _MenuItem(
@@ -88,21 +101,21 @@ class ProfileScreen extends StatelessWidget {
           ),
           _MenuItem(
             icon: Icons.monitor_weight_outlined,
-            title: 'Bioimpedância',
-            subtitle: '% gordura, massa magra, TMB',
+            title: 'Registrar Medição',
+            subtitle: 'Peso, % gordura, massa magra',
             onTap: () => context.push('/bioimpedancia'),
           ),
           _MenuItem(
             icon: Icons.groups_outlined,
             title: 'Meus Profissionais',
-            subtitle: 'Personal e nutricionista',
-            badge: '2',
-            onTap: () => context.push('/profissionais'),
+            subtitle: 'Em breve — fora da demo',
+            enabled: false,
+            onTap: () {},
           ),
           _MenuItem(
             icon: Icons.settings_outlined,
             title: 'Configurações',
-            subtitle: 'Assinatura, preferências',
+            subtitle: 'Preferências, sair da conta',
             onTap: () => context.push('/configuracoes'),
           ),
         ],
@@ -146,64 +159,53 @@ class _MenuItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.badge,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final String? badge;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: FtCard(
-        onTap: onTap,
-        radius: 14,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceDeep,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(icon, size: 20, color: AppColors.primary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style:
-                        const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 1),
-                Text(subtitle,
-                    style: const TextStyle(
-                        fontSize: 12.5, color: AppColors.textSecondary)),
-              ],
-            ),
-          ),
-          if (badge != null)
+      child: Opacity(
+        opacity: enabled ? 1 : .45,
+        child: FtCard(
+          onTap: enabled ? onTap : null,
+          radius: 14,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
             Container(
-              margin: const EdgeInsets.only(right: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color: AppColors.greenBgSoft,
-                borderRadius: BorderRadius.circular(10),
+                color: AppColors.surfaceDeep,
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: Text(badge!,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary)),
+              child: Icon(icon, size: 20, color: AppColors.primary),
             ),
-          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
-        ]),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 1),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textDisabled),
+          ]),
+        ),
       ),
     );
   }

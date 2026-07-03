@@ -9,23 +9,22 @@ import '../../features/auth/screens/recover_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/body_metrics/screens/bioimpedance_screen.dart';
 import '../../features/body_metrics/screens/evolution_screen.dart';
-import '../../features/chat/chat_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/diet/screens/food_search_screen.dart';
 import '../../features/diet/screens/meal_detail_screen.dart';
 import '../../features/diet/screens/meal_plan_screen.dart';
-import '../../features/professional/screens/accept_invite_screen.dart';
-import '../../features/professional/screens/assigned_plan_screen.dart';
-import '../../features/professional/screens/my_professionals_screen.dart';
 import '../../features/profile/screens/physical_data_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/settings_screen.dart';
 import '../../features/workout_session/execution_screen.dart';
-import '../../features/workouts/screens/explore_templates_screen.dart';
+import '../../features/workouts/screens/create_workout_screen.dart';
 import '../../features/workouts/screens/my_workouts_screen.dart';
 import '../../features/workouts/screens/workout_detail_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/widgets.dart';
+
+// Fora da demo (MVP.md): vínculo profissional, plano atribuído, chat e
+// explorar templates — telas preservadas em features/, sem rota.
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ValueNotifier<AuthStatus>(AuthStatus.unknown);
@@ -83,20 +82,28 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // telas fora do shell (fullscreen, sem bottom nav)
       GoRoute(
-          path: '/treinos/explorar',
-          builder: (_, _) => const ExploreTemplatesScreen()),
+          path: '/treinos/criar',
+          builder: (_, _) => const CreateWorkoutScreen()),
       GoRoute(
-        path: '/treinos/:letter',
-        builder: (_, state) =>
-            WorkoutDetailScreen(letter: state.pathParameters['letter']!),
+        path: '/treinos/:id',
+        builder: (_, state) => WorkoutDetailScreen(
+            workoutId: int.parse(state.pathParameters['id']!)),
       ),
       GoRoute(
-        path: '/treinos/:letter/execucao',
+        path: '/treinos/:id/execucao',
         builder: (_, state) =>
-            ExecutionScreen(letter: state.pathParameters['letter']!),
+            ExecutionScreen(workoutId: int.parse(state.pathParameters['id']!)),
       ),
-      GoRoute(path: '/dieta/buscar', builder: (_, _) => const FoodSearchScreen()),
-      GoRoute(path: '/dieta/refeicao', builder: (_, _) => const MealDetailScreen()),
+      GoRoute(
+        path: '/dieta/buscar',
+        builder: (_, state) => FoodSearchScreen(
+            mealId: int.tryParse(state.uri.queryParameters['meal'] ?? '')),
+      ),
+      GoRoute(
+        path: '/dieta/refeicao/:id',
+        builder: (_, state) =>
+            MealDetailScreen(mealId: int.parse(state.pathParameters['id']!)),
+      ),
       GoRoute(
           path: '/bioimpedancia', builder: (_, _) => const BioimpedanceScreen()),
       GoRoute(
@@ -105,15 +112,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             fromOnboarding: state.uri.queryParameters['onboarding'] == '1'),
       ),
       GoRoute(path: '/configuracoes', builder: (_, _) => const SettingsScreen()),
-      GoRoute(
-          path: '/profissionais',
-          builder: (_, _) => const MyProfessionalsScreen()),
-      GoRoute(
-          path: '/aceitar-convite',
-          builder: (_, _) => const AcceptInviteScreen()),
-      GoRoute(
-          path: '/plano-atribuido', builder: (_, _) => const AssignedPlanScreen()),
-      GoRoute(path: '/chat', builder: (_, _) => const ChatScreen()),
     ],
   );
 });

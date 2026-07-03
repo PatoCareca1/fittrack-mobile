@@ -1,200 +1,322 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/widgets.dart';
-import '../../mock/mock_data.dart';
+import '../body_metrics/data.dart';
+import '../diet/data.dart';
+import '../profile/data.dart';
+import '../workouts/data.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final today = DateFormat('EEEE · d MMM', 'pt_BR').format(DateTime.now());
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(toBeginningOfSentenceCase(today) ?? today,
-                        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-                    const SizedBox(height: 2),
-                    const Text('Olá, Lucas',
-                        style: TextStyle(
-                            fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.5)),
-                  ],
-                ),
-              ),
-              SquareIconButton(
-                icon: Icons.chat_bubble_outline,
-                size: 42,
-                color: AppColors.textSecondary,
-                badgeColor: AppColors.accent,
-                onTap: () => context.push('/chat'),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: () => context.go('/perfil'),
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryDark]),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: const Center(
-                    child: Text('L',
-                        style: TextStyle(
-                            color: AppColors.onPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
+    final me = ref.watch(meProvider).valueOrNull;
+    final metric = ref.watch(latestMetricProvider).valueOrNull;
+    final plan = ref.watch(myPlanProvider).valueOrNull;
+    final doneIds = ref.watch(todayDoneMealsProvider).valueOrNull ?? {};
+    final workouts = ref.watch(workoutsProvider).valueOrNull;
 
-          // CTA Iniciar Treino
-          InkWell(
-            onTap: () => context.push('/treinos/A/execucao'),
-            borderRadius: BorderRadius.circular(18),
-            child: Ink(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [AppColors.accent, Color(0xFFEA580C)]),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(children: [
+    // Consumo do dia = soma dos totais das refeições marcadas hoje.
+    var consumed = const Macros();
+    if (plan != null) {
+      for (final meal in plan.meals) {
+        if (doneIds.contains(meal.id)) consumed = consumed + meal.totals;
+      }
+    }
+
+    final firstName = me?.firstName ?? '';
+    final initial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '·';
+    final todayWorkout = (workouts?.isNotEmpty ?? false) ? workouts!.first : null;
+
+    return SafeArea(
+      child: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          ref
+            ..invalidate(meProvider)
+            ..invalidate(bodyMetricsProvider)
+            ..invalidate(myPlanProvider)
+            ..invalidate(todayDoneMealsProvider)
+            ..invalidate(workoutsProvider);
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          children: [
+            Row(
+              children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('TREINO DE HOJE',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: .5,
-                              color: Color(0xFF451A03))),
-                      const SizedBox(height: 4),
-                      const Text('Treino A · Peito e Tríceps',
-                          style: TextStyle(
-                              fontSize: 19,
+                      Text(toBeginningOfSentenceCase(today) ?? today,
+                          style: const TextStyle(
+                              fontSize: 14, color: AppColors.textSecondary)),
+                      const SizedBox(height: 2),
+                      Text(firstName.isEmpty ? 'Olá!' : 'Olá, $firstName',
+                          style: const TextStyle(
+                              fontSize: 23,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: -.3,
-                              color: AppColors.onAccent)),
-                      const SizedBox(height: 3),
-                      Text('8 exercícios · ~50 min',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF7C2D12))),
+                              letterSpacing: -.5)),
                     ],
                   ),
                 ),
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: .18), shape: BoxShape.circle),
-                  child: const Icon(Icons.play_arrow, color: AppColors.onAccent),
-                ),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // anel de calorias + macros
-          FtCard(
-            padding: const EdgeInsets.all(18),
-            child: Row(children: [
-              SizedBox(
-                width: 104,
-                height: 104,
-                child: Stack(alignment: Alignment.center, children: [
-                  SizedBox(
-                    width: 98,
-                    height: 98,
-                    child: CircularProgressIndicator(
-                      value: MockData.kcalConsumed / MockData.kcalGoal,
-                      strokeWidth: 10,
-                      strokeCap: StrokeCap.round,
-                      color: AppColors.primary,
-                      backgroundColor: AppColors.cardAlt,
+                GestureDetector(
+                  onTap: () => context.go('/perfil'),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          colors: [AppColors.primary, AppColors.primaryDark]),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Center(
+                      child: Text(initial,
+                          style: const TextStyle(
+                              color: AppColors.onPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15)),
                     ),
                   ),
-                  const FittedBox(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      GroteskText('${MockData.kcalConsumed}', fontSize: 26),
-                      Text('de ${MockData.kcalGoal} kcal',
-                          style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                    ]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+
+            // CTA treino do dia
+            if (todayWorkout != null)
+              InkWell(
+                onTap: () => context.push('/treinos/${todayWorkout.id}'),
+                borderRadius: BorderRadius.circular(18),
+                child: Ink(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [AppColors.accent, Color(0xFFEA580C)]),
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                ]),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('TREINO DE HOJE',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: .5,
+                                  color: Color(0xFF451A03))),
+                          const SizedBox(height: 4),
+                          Text(todayWorkout.name,
+                              style: const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -.3,
+                                  color: AppColors.onAccent)),
+                          const SizedBox(height: 3),
+                          Text(
+                              '${todayWorkout.exercises.length} exercícios · ${todayWorkout.totalSets} séries',
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF7C2D12))),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .18),
+                          shape: BoxShape.circle),
+                      child: const Icon(Icons.play_arrow, color: AppColors.onAccent),
+                    ),
+                  ]),
+                ),
+              )
+            else
+              InkWell(
+                onTap: () => context.push('/treinos/criar'),
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceDeep,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.add_circle_outline,
+                        size: 32, color: AppColors.accent),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Crie seu primeiro treino',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w800)),
+                          SizedBox(height: 2),
+                          Text('Monte sua divisão com a biblioteca de exercícios',
+                              style: TextStyle(
+                                  fontSize: 12.5, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
               ),
-              const SizedBox(width: 18),
+            const SizedBox(height: 18),
+
+            // anel de calorias + macros
+            FtCard(
+              padding: const EdgeInsets.all(18),
+              child: metric == null
+                  ? Row(children: [
+                      const Icon(Icons.calculate_outlined,
+                          size: 34, color: AppColors.textMuted),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Sem meta calórica ainda',
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                            GestureDetector(
+                              onTap: () => context.push('/dados-fisicos'),
+                              child: const Text(
+                                  'Preencha seus dados físicos para calcular →',
+                                  style: TextStyle(
+                                      fontSize: 13, color: AppColors.primary)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ])
+                  : Row(children: [
+                      SizedBox(
+                        width: 104,
+                        height: 104,
+                        child: Stack(alignment: Alignment.center, children: [
+                          SizedBox(
+                            width: 98,
+                            height: 98,
+                            child: CircularProgressIndicator(
+                              value: (consumed.kcal / metric.calorieGoal)
+                                  .clamp(0.0, 1.0),
+                              strokeWidth: 10,
+                              strokeCap: StrokeCap.round,
+                              color: AppColors.primary,
+                              backgroundColor: AppColors.cardAlt,
+                            ),
+                          ),
+                          FittedBox(
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              GroteskText('${consumed.kcal.round()}', fontSize: 26),
+                              Text('de ${metric.calorieGoal} kcal',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: AppColors.textMuted)),
+                            ]),
+                          ),
+                        ]),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(children: [
+                          _MacroBar(
+                              name: 'Proteína',
+                              color: AppColors.blueAccent,
+                              value: consumed.proteinG.round(),
+                              goal: metric.proteinG),
+                          const SizedBox(height: 13),
+                          _MacroBar(
+                              name: 'Carbo',
+                              color: AppColors.accent,
+                              value: consumed.carbsG.round(),
+                              goal: metric.carbsG),
+                          const SizedBox(height: 13),
+                          _MacroBar(
+                              name: 'Gordura',
+                              color: AppColors.error,
+                              value: consumed.fatG.round(),
+                              goal: metric.fatG),
+                        ]),
+                      ),
+                    ]),
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Refeições de hoje',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                TextButton(
+                  onPressed: () => context.go('/dieta'),
+                  child: const Text('Ver tudo',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary)),
+                ),
+              ],
+            ),
+            if (plan == null || plan.meals.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  plan == null
+                      ? 'Carregando...'
+                      : 'Monte suas refeições na aba Dieta.',
+                  style:
+                      const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                ),
+              )
+            else
+              for (final meal in plan.meals) ...[
+                _MealRow(
+                  meal: meal,
+                  done: doneIds.contains(meal.id),
+                  onTap: () => context.go('/dieta'),
+                ),
+                const SizedBox(height: 10),
+              ],
+            const SizedBox(height: 8),
+
+            Row(children: [
               Expanded(
-                child: Column(children: [
-                  for (final m in MockData.macros) ...[
-                    _MacroBar(name: m.$1, color: m.$2, value: m.$3, goal: m.$4),
-                    if (m != MockData.macros.last) const SizedBox(height: 13),
-                  ],
-                ]),
+                child: _Shortcut(
+                  label: 'Adicionar Refeição',
+                  icon: Icons.add,
+                  iconColor: AppColors.primary,
+                  iconBg: AppColors.greenBgSoft,
+                  onTap: () => context.go('/dieta'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _Shortcut(
+                  label: 'Registrar Peso',
+                  icon: Icons.monitor_weight_outlined,
+                  iconColor: AppColors.accent,
+                  iconBg: AppColors.orangeBgSoft,
+                  onTap: () => context.push('/bioimpedancia'),
+                ),
               ),
             ]),
-          ),
-          const SizedBox(height: 16),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Refeições de hoje',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              TextButton(
-                onPressed: () => context.go('/dieta'),
-                child: const Text('Ver tudo',
-                    style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary)),
-              ),
-            ],
-          ),
-          for (final meal in MockData.meals) ...[
-            _MealRow(meal: meal, onTap: () => context.go('/dieta')),
-            const SizedBox(height: 10),
           ],
-          const SizedBox(height: 8),
-
-          Row(children: [
-            Expanded(
-              child: _Shortcut(
-                label: 'Adicionar Refeição',
-                icon: Icons.add,
-                iconColor: AppColors.primary,
-                iconBg: AppColors.greenBgSoft,
-                onTap: () => context.push('/dieta/buscar'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _Shortcut(
-                label: 'Registrar Peso',
-                icon: Icons.schedule,
-                iconColor: AppColors.accent,
-                iconBg: AppColors.orangeBgSoft,
-                onTap: () => context.push('/bioimpedancia'),
-              ),
-            ),
-          ]),
-        ],
+        ),
       ),
     );
   }
@@ -224,7 +346,7 @@ class _MacroBar extends StatelessWidget {
       ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: LinearProgressIndicator(
-          value: (value / goal).clamp(0, 1),
+          value: goal == 0 ? 0 : (value / goal).clamp(0.0, 1.0),
           minHeight: 7,
           color: color,
           backgroundColor: AppColors.cardAlt,
@@ -235,9 +357,10 @@ class _MacroBar extends StatelessWidget {
 }
 
 class _MealRow extends StatelessWidget {
-  const _MealRow({required this.meal, required this.onTap});
+  const _MealRow({required this.meal, required this.done, required this.onTap});
 
-  final MockMeal meal;
+  final MealModel meal;
+  final bool done;
   final VoidCallback onTap;
 
   @override
@@ -251,13 +374,13 @@ class _MealRow extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: meal.done ? AppColors.greenBgSoft : AppColors.surfaceDeep,
+            color: done ? AppColors.greenBgSoft : AppColors.surfaceDeep,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
-                color: meal.done ? AppColors.primaryDark : AppColors.border),
+                color: done ? AppColors.primaryDark : AppColors.border),
           ),
-          child: Icon(meal.done ? Icons.check : Icons.circle_outlined,
-              size: 17, color: meal.done ? AppColors.primary : AppColors.textMuted),
+          child: Icon(done ? Icons.check : Icons.circle_outlined,
+              size: 17, color: done ? AppColors.primary : AppColors.textMuted),
         ),
         const SizedBox(width: 13),
         Expanded(
@@ -268,16 +391,17 @@ class _MealRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
-                      color: meal.done ? AppColors.textPrimary : AppColors.textSecondary)),
-              Text(meal.time,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      color: done ? AppColors.textPrimary : AppColors.textSecondary)),
+              if (meal.timeLabel.isNotEmpty)
+                Text(meal.timeLabel,
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
             ],
           ),
         ),
-        GroteskText('${meal.kcal} kcal',
+        GroteskText('${meal.totals.kcal.round()} kcal',
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: meal.done ? AppColors.textPrimary : AppColors.textMuted),
+            color: done ? AppColors.textPrimary : AppColors.textMuted),
       ]),
     );
   }

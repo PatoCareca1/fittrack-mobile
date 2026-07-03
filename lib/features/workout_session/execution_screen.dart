@@ -1,58 +1,56 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/widgets.dart';
-import '../../mock/mock_data.dart';
+import '../workouts/data.dart';
 
 class _SetEntry {
-  _SetEntry({required this.load, required this.reps, this.done = false});
+  _SetEntry({required this.load, required this.reps});
 
-  String load;
-  String reps;
-  bool done;
+  final TextEditingController load;
+  final TextEditingController reps;
+  bool done = false;
+
+  void dispose() {
+    load.dispose();
+    reps.dispose();
+  }
 }
 
-/// Execução de treino. Estado local por enquanto; a persistência offline-first
-/// em Hive + sync (regra crítica do README 5.4) entra na fase de integração.
-class ExecutionScreen extends StatefulWidget {
-  const ExecutionScreen({super.key, required this.letter});
+/// Execução de treino ligada à API: start-session ao abrir, log-set a cada
+/// série concluída, finish ao encerrar. Persistência offline-first (Hive)
+/// fica para a fase pós-demo.
+class ExecutionScreen extends ConsumerStatefulWidget {
+  const ExecutionScreen({super.key, required this.workoutId});
 
-  final String letter;
+  final int workoutId;
 
   @override
-  State<ExecutionScreen> createState() => _ExecutionScreenState();
+  ConsumerState<ExecutionScreen> createState() => _ExecutionScreenState();
 }
 
-class _ExecutionScreenState extends State<ExecutionScreen> {
-  late final MockWorkout _workout = MockData.workouts.firstWhere(
-    (w) => w.letter == widget.letter,
-    orElse: () => MockData.workouts.first,
-  );
-
+class _ExecutionScreenState extends ConsumerState<ExecutionScreen> {
+  WorkoutModel? _workout;
+  int? _sessionId;
   int _exIndex = 0;
+  final Map<int, List<_SetEntry>> _setsByExercise = {};
   late final DateTime _start = DateTime.now();
   Timer? _ticker;
   int _restLeft = 0;
   bool _restRunning = false;
+  bool _finishing = false;
   final _comment = TextEditingController();
-
-  late List<_SetEntry> _sets = _buildSets();
-
-  List<_SetEntry> _buildSets() => [
-        _SetEntry(load: '60', reps: '10', done: true),
-        _SetEntry(load: '60', reps: '9', done: true),
-        _SetEntry(load: '62', reps: '8'),
-        _SetEntry(load: '62', reps: ''),
-      ];
 
   @override
   void initState() {
     super.initState();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
       setState(() {
         if (_restRunning && _restLeft > 0) {
           _restLeft--;
@@ -60,41 +58,123 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
         }
       });
     });
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final workouts = await ref.read(workoutsRepositoryProvider).list();
+    final workout = workouts.where((w) => w.id == widget.workoutId).firstOrNull;
+    if (workout == null || workout.exercises.isEmpty) {
+      if (mounted) context.pop();
+      return;
+    }
+    final sessionId =
+        await ref.read(workoutsRepositoryProvider).startSession(workout.id);
+    if (!mounted) return;
+    setState(() {
+      _workout = workout;
+      _sessionId = sessionId;
+    });
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
     _comment.dispose();
+    for (final sets in _setsByExercise.values) {
+      for (final entry in sets) {
+        entry.dispose();
+      }
+    }
     super.dispose();
+  }
+
+  List<_SetEntry> _setsFor(int index) {
+    return _setsByExercise.putIfAbsent(index, () {
+      final we = _workout!.exercises[index];
+      return List.generate(
+        we.sets,
+        (_) => _SetEntry(
+          load: TextEditingController(
+              text: we.loadKg == null
+                  ? ''
+                  : we.loadKg!.toStringAsFixed(we.loadKg! % 1 == 0 ? 0 : 1)),
+          reps: TextEditingController(text: we.reps?.toString() ?? ''),
+        ),
+      );
+    });
   }
 
   String _fmt(int seconds) =>
       '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
-  void _toggleSet(int i) {
+  Future<void> _toggleSet(int setIndex) async {
+    final we = _workout!.exercises[_exIndex];
+    final entry = _setsFor(_exIndex)[setIndex];
     setState(() {
-      _sets[i].done = !_sets[i].done;
-      if (_sets[i].done) {
-        _restLeft = 90;
+      entry.done = !entry.done;
+      if (entry.done) {
+        _restLeft = we.restSeconds;
         _restRunning = true;
       }
     });
+    if (entry.done && _sessionId != null) {
+      try {
+        await ref.read(workoutsRepositoryProvider).logSet(
+              sessionId: _sessionId!,
+              workoutExerciseId: we.id,
+              setNumber: setIndex + 1,
+              repsDone: int.tryParse(entry.reps.text),
+              loadKg: double.tryParse(entry.load.text.replaceAll(',', '.')),
+            );
+      } catch (_) {
+        // Não interrompe o treino por falha de rede — o log fica local.
+      }
+    }
   }
 
-  void _nextExercise() {
-    if (_exIndex < _workout.exercises.length - 1) {
-      setState(() {
-        _exIndex++;
-        _sets = _buildSets();
-      });
+  void _goTo(int index) {
+    if (index < 0 || index >= _workout!.exercises.length) return;
+    setState(() => _exIndex = index);
+  }
+
+  Future<void> _finish() async {
+    setState(() => _finishing = true);
+    try {
+      if (_sessionId != null) {
+        await ref
+            .read(workoutsRepositoryProvider)
+            .finishSession(_sessionId!, notes: _comment.text.trim());
+      }
+      ref.invalidate(sessionsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Treino registrado! 💪')));
+        context.go('/evolucao');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _finishing = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Falha ao finalizar. Verifique a conexão.')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final exercise = _workout.exercises[_exIndex];
+    final workout = _workout;
+    if (workout == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+    final exercise = workout.exercises[_exIndex];
+    final sets = _setsFor(_exIndex);
     final elapsed = DateTime.now().difference(_start).inSeconds;
+    final isFirst = _exIndex == 0;
+    final isLast = _exIndex == workout.exercises.length - 1;
+
     return Scaffold(
       body: SafeArea(
         child: Stack(children: [
@@ -107,8 +187,9 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                   SquareIconButton(icon: Icons.close, onTap: () => context.pop()),
                   Column(children: [
                     Text(
-                      'Treino ${_workout.letter} · Exercício ${_exIndex + 1} de ${_workout.exercises.length}',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      '${workout.name} · ${_exIndex + 1} de ${workout.exercises.length}',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 2),
                     GroteskText(_fmt(elapsed),
@@ -116,26 +197,40 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.accent),
                   ]),
-                  SquareIconButton(
-                      icon: Icons.arrow_forward_ios, onTap: _nextExercise),
+                  Row(children: [
+                    SquareIconButton(
+                      icon: Icons.arrow_back_ios_new,
+                      color: isFirst ? AppColors.textDisabled : AppColors.textPrimary,
+                      onTap: () => _goTo(_exIndex - 1),
+                    ),
+                    const SizedBox(width: 8),
+                    SquareIconButton(
+                      icon: Icons.arrow_forward_ios,
+                      color: isLast ? AppColors.textDisabled : AppColors.textPrimary,
+                      onTap: () => _goTo(_exIndex + 1),
+                    ),
+                  ]),
                 ],
               ),
               const SizedBox(height: 18),
 
-              // progresso por exercício
+              // progresso por exercício (toque para pular direto)
               Row(children: [
-                for (var i = 0; i < _workout.exercises.length; i++)
+                for (var i = 0; i < workout.exercises.length; i++)
                   Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: i < _exIndex
-                            ? AppColors.primary
-                            : i == _exIndex
-                                ? AppColors.accent
-                                : AppColors.cardAlt,
-                        borderRadius: BorderRadius.circular(2),
+                    child: GestureDetector(
+                      onTap: () => _goTo(i),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: i < _exIndex
+                              ? AppColors.primary
+                              : i == _exIndex
+                                  ? AppColors.accent
+                                  : AppColors.cardAlt,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ),
                     ),
                   ),
@@ -152,24 +247,27 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                       color: AppColors.greenBgSoft,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Center(child: MuscleIcon(color: exercise.color, size: 40)),
+                    child: Center(
+                        child:
+                            MuscleIcon(color: exercise.exercise.muscleColor, size: 40)),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(exercise.name,
+                        Text(exercise.exercise.name,
                             style: const TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -.3)),
                         const SizedBox(height: 8),
                         Wrap(spacing: 7, runSpacing: 6, children: [
-                          FtTag(exercise.muscle, color: exercise.color),
-                          FtTag(exercise.equipment,
+                          FtTag(exercise.exercise.muscleLabel.toUpperCase(),
+                              color: exercise.exercise.muscleColor),
+                          FtTag(exercise.scheme,
                               color: AppColors.textSecondary, filled: false),
-                          const FtTag('COMPOSTO',
+                          FtTag('DESCANSO ${exercise.restSeconds}s',
                               color: AppColors.textSecondary, filled: false),
                         ]),
                       ],
@@ -184,15 +282,16 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                 children: [
                   Text('Séries',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  Text('Toque no ✓ para concluir',
+                  Text('Edite carga/reps e toque no ✓',
                       style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                 ],
               ),
               const SizedBox(height: 12),
               _SetHeaderRow(),
               const SizedBox(height: 8),
-              for (var i = 0; i < _sets.length; i++) ...[
-                _SetRow(index: i, entry: _sets[i], onToggle: () => _toggleSet(i)),
+              for (var i = 0; i < sets.length; i++) ...[
+                _SetRow(
+                    index: i, entry: sets[i], onToggle: () => _toggleSet(i)),
                 const SizedBox(height: 8),
               ],
               const SizedBox(height: 10),
@@ -228,13 +327,15 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                     _TimerButton(
                       label: _restRunning
                           ? 'Pausar'
-                          : (_restLeft > 0 ? 'Continuar' : 'Iniciar 90s'),
+                          : (_restLeft > 0
+                              ? 'Continuar'
+                              : 'Iniciar ${exercise.restSeconds}s'),
                       primary: true,
                       onTap: () => setState(() {
                         if (_restLeft > 0) {
                           _restRunning = !_restRunning;
                         } else {
-                          _restLeft = 90;
+                          _restLeft = exercise.restSeconds;
                           _restRunning = true;
                         }
                       }),
@@ -292,12 +393,8 @@ class _ExecutionScreenState extends State<ExecutionScreen> {
                 ),
               ),
               child: PillButton(
-                label: 'Finalizar treino',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Treino registrado! 💪')));
-                  context.go('/evolucao');
-                },
+                label: _finishing ? 'Finalizando...' : 'Finalizar treino',
+                onPressed: _finishing ? null : _finish,
               ),
             ),
           ),
@@ -352,9 +449,9 @@ class _SetRow extends StatelessWidget {
                     color: done ? AppColors.primary : AppColors.textSecondary)),
           ),
         ),
-        Expanded(child: _ValueBox(value: entry.load, suffix: 'kg')),
+        Expanded(child: _ValueField(controller: entry.load, suffix: 'kg')),
         const SizedBox(width: 8),
-        Expanded(child: _ValueBox(value: entry.reps)),
+        Expanded(child: _ValueField(controller: entry.reps)),
         const SizedBox(width: 8),
         InkWell(
           onTap: onToggle,
@@ -375,10 +472,10 @@ class _SetRow extends StatelessWidget {
   }
 }
 
-class _ValueBox extends StatelessWidget {
-  const _ValueBox({required this.value, this.suffix});
+class _ValueField extends StatelessWidget {
+  const _ValueField({required this.controller, this.suffix});
 
-  final String value;
+  final TextEditingController controller;
   final String? suffix;
 
   @override
@@ -390,18 +487,28 @@ class _ValueBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(value.isEmpty ? '—' : value,
-            style: AppTheme.grotesk(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color:
-                    value.isEmpty ? AppColors.textDisabled : AppColors.textPrimary)),
-        if (suffix != null) ...[
-          const SizedBox(width: 4),
-          Text(suffix!,
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-        ],
+      child: Row(children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.center,
+            style: AppTheme.grotesk(fontSize: 15, fontWeight: FontWeight.w600),
+            decoration: const InputDecoration(
+              isDense: true,
+              filled: false,
+              contentPadding: EdgeInsets.symmetric(vertical: 7),
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+          ),
+        ),
+        if (suffix != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(suffix!,
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+          ),
       ]),
     );
   }
@@ -425,6 +532,7 @@ class _TimerButton extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: AppColors.onAccent,
+                  padding: EdgeInsets.zero,
                   textStyle:
                       const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   shape: RoundedRectangleBorder(
@@ -437,6 +545,7 @@ class _TimerButton extends StatelessWidget {
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.border),
                   foregroundColor: AppColors.textSecondary,
+                  padding: EdgeInsets.zero,
                   textStyle:
                       const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   shape: RoundedRectangleBorder(

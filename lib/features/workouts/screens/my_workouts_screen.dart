@@ -1,104 +1,171 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../mock/mock_data.dart';
+import '../data.dart';
 
-class MyWorkoutsScreen extends StatelessWidget {
+class MyWorkoutsScreen extends ConsumerWidget {
   const MyWorkoutsScreen({super.key});
+
+  static const _letterColors = [
+    AppColors.primary,
+    AppColors.accent,
+    AppColors.blueAccent,
+    AppColors.warning,
+    AppColors.error,
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final workoutsAsync = ref.watch(workoutsProvider);
+    return SafeArea(
+      child: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async => ref.invalidate(workoutsProvider),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          children: [
+            const Text('Meus Treinos',
+                style: TextStyle(
+                    fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.5)),
+            const SizedBox(height: 6),
+            const Text('Monte sua divisão de treinos',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            const SizedBox(height: 20),
+            workoutsAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.only(top: 100),
+                child: Center(
+                    child: CircularProgressIndicator(color: AppColors.primary)),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.only(top: 80),
+                child: Column(children: [
+                  const Text('Não foi possível carregar.',
+                      style: TextStyle(color: AppColors.textSecondary)),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                      onPressed: () => ref.invalidate(workoutsProvider),
+                      child: const Text('Tentar de novo')),
+                ]),
+              ),
+              data: (workouts) => Column(children: [
+                if (workouts.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceDeep,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Column(children: [
+                      Icon(Icons.fitness_center,
+                          size: 40, color: AppColors.textMuted),
+                      SizedBox(height: 12),
+                      Text('Nenhum treino ainda',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                      SizedBox(height: 4),
+                      Text('Crie seu primeiro treino abaixo',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSecondary)),
+                    ]),
+                  )
+                else
+                  for (var i = 0; i < workouts.length; i++) ...[
+                    _WorkoutCard(
+                      workout: workouts[i],
+                      letter: String.fromCharCode(65 + (i % 26)),
+                      color: _letterColors[i % _letterColors.length],
+                      onTap: () => context.push('/treinos/${workouts[i].id}'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () => context.push('/treinos/criar'),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceDeep,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add, size: 18, color: AppColors.primary),
+                        SizedBox(width: 8),
+                        Text('Criar treino',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkoutCard extends StatelessWidget {
+  const _WorkoutCard({
+    required this.workout,
+    required this.letter,
+    required this.color,
+    required this.onTap,
+  });
+
+  final WorkoutModel workout;
+  final String letter;
+  final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return FtCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      child: Row(children: [
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: .33)),
+          ),
+          child: Center(
+              child: Text(letter, style: AppTheme.grotesk(fontSize: 22, color: color))),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Meus Treinos',
-                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.5)),
-              SquareIconButton(
-                icon: Icons.search,
-                size: 42,
-                color: AppColors.textSecondary,
-                onTap: () => context.push('/treinos/explorar'),
-              ),
+              Text(workout.name,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Text(
+                  '${workout.exercises.length} exercícios · ${workout.totalSets} séries',
+                  style:
+                      const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
             ],
           ),
-          const SizedBox(height: 6),
-          const Text('Divisão ABC · Hipertrofia',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-          const SizedBox(height: 20),
-          for (final w in MockData.workouts) ...[
-            FtCard(
-              onTap: () => context.push('/treinos/${w.letter}'),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-              child: Row(children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: w.color.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: w.color.withValues(alpha: .33)),
-                  ),
-                  child: Center(
-                      child: Text(w.letter,
-                          style: AppTheme.grotesk(fontSize: 22, color: w.color))),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Treino ${w.letter}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 3),
-                      Text(w.name,
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.textSecondary)),
-                      const SizedBox(height: 3),
-                      Text('${w.exerciseCount} exercícios · ${w.sets} séries',
-                          style: const TextStyle(
-                              fontSize: 11.5, color: AppColors.textMuted)),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.textDisabled),
-              ]),
-            ),
-            const SizedBox(height: 12),
-          ],
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: () => context.push('/treinos/explorar'),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceDeep,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add, size: 18, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('Criar ou explorar rotina',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+        const Icon(Icons.chevron_right, color: AppColors.textDisabled),
+      ]),
     );
   }
 }
