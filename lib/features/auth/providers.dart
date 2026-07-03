@@ -74,14 +74,22 @@ class AuthController extends Notifier<AuthState> {
     required String password,
   }) async {
     state = state.copyWith(loading: true);
+    final parts = name.split(RegExp(r'\s+'));
     try {
-      await _dio.post('/auth/register/', data: {
+      final res = await _dio.post('/auth/register/', data: {
         'account_type': accountType,
-        'name': name,
+        'first_name': parts.first,
+        'last_name': parts.length > 1 ? parts.sublist(1).join(' ') : '',
         'email': email,
         'password': password,
       });
-      return login(email, password);
+      // O register do backend já retorna o par de tokens junto com o usuário.
+      final access = res.data['access'] as String?;
+      final refresh = res.data['refresh'] as String?;
+      if (access == null || refresh == null) return login(email, password);
+      await _tokens.save(access: access, refresh: refresh);
+      state = state.copyWith(status: AuthStatus.signedIn, loading: false);
+      return true;
     } on DioException catch (e) {
       state = state.copyWith(
         loading: false,

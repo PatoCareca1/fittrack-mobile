@@ -132,11 +132,13 @@ class DashboardScreen extends StatelessWidget {
                       backgroundColor: AppColors.cardAlt,
                     ),
                   ),
-                  Column(mainAxisSize: MainAxisSize.min, children: [
-                    const GroteskText('${MockData.kcalConsumed}', fontSize: 26),
-                    const Text('de ${MockData.kcalGoal} kcal',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                  ]),
+                  const FittedBox(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      GroteskText('${MockData.kcalConsumed}', fontSize: 26),
+                      Text('de ${MockData.kcalGoal} kcal',
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    ]),
+                  ),
                 ]),
               ),
               const SizedBox(width: 18),

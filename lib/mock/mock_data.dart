@@ -148,7 +148,7 @@ abstract class MockData {
   ];
 
   /// Plano atribuído pelo personal (somente leitura — RN10).
-  static const assignedWorkout = workouts[1];
+  static MockWorkout get assignedWorkout => workouts[1];
 
   static const templates = [
     ('Push Pull Legs', '6× por semana', 'Intermediário', AppColors.primary),

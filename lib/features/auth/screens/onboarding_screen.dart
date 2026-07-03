@@ -75,9 +75,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ],
               ),
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                     _OnbArt(index: _index),
                     const SizedBox(height: 28),
                     Text(page.title,
@@ -122,9 +124,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                         ]),
                       ),
-                      const SizedBox(height: 10),
-                    ],
-                  ],
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
               Row(
