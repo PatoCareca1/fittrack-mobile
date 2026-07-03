@@ -126,9 +126,7 @@ class WorkoutSessionModel {
     }
     return WorkoutSessionModel(
       id: json['id'] as int,
-      workoutName: (json['workout'] is Map)
-          ? json['workout']['name'] as String
-          : 'Treino',
+      workoutName: json['workout_name'] as String? ?? 'Treino',
       status: json['status'] as String,
       startedAt: DateTime.parse(json['started_at'] as String),
       finishedAt: json['finished_at'] == null

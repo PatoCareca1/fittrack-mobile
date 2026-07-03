@@ -1,66 +1,53 @@
 # Progress — fittrack-mobile
 
-Última atualização: 2026-07-02
+Última atualização: 2026-07-03
 
 ## Papel deste repo
 
 App mobile Android (Flutter) do FitTrack. Ver `README.md` local e o README raiz em
 `../fittrack-frontend/README.md`. Backend Django em `../fittrack-backend`.
+**Escopo da demo em andamento: ver `MVP.md`.**
 
 ## O que já está pronto
 
-Todas as **21 telas do protótipo aprovado** (`FitTrack.dc.html`) implementadas em
-Flutter, fiéis ao layout/microcopy/tokens do design system:
-
-| Área | Telas | Status |
-|---|---|---|
-| Auth | Splash · Onboarding (3 páginas) · Login · Cadastro (3 tipos de conta) · Recuperar senha | Prontas — login/cadastro ligados de verdade ao backend (`/auth/login/`, `/auth/register/`) |
-| Início | Dashboard (CTA treino, anel kcal, macros, refeições, atalhos) | Pronta (mock) |
-| Treino | Meus Treinos · Explorar Rotinas · Detalhe do Treino · Execução (timer sessão + descanso, séries, comentário) | Prontas (mock) |
-| Dieta | Plano de Refeições · Buscar Alimento (TACO/OFF) · Detalhe de refeição | Prontas (mock) |
-| Evolução | Gráfico peso/gordura/massa magra (CustomPainter) + sessões | Pronta (mock) |
-| Perfil | Perfil · Configurações · Dados Físicos · Bioimpedância (+histórico) | Prontas (mock) |
-| Profissional | Meus Profissionais · Aceitar Convite · Plano Atribuído (selo somente leitura, RN04/RN10) · Chat | Prontas (mock) |
+**MVP demo funcional ponta a ponta contra a API real** (2026-07-03) — cadastro →
+dados físicos (meta calórica calculada) → dieta real (refeições, busca TACO,
+quantidades, mark-done diário) → treinos reais (criação com biblioteca de 57
+exercícios, execução com sessão/log-set/finish, navegação entre exercícios) →
+evolução real (medições + sessões). Fluxo completo validado no emulador com
+usuária nova ("Ana": 2670 kcal calculadas, refeição de 192 kcal marcada, treino
+com tonelagem 120kg registrado).
 
 Infra:
-- Router go_router com **guard de autenticação** (splash → onboarding/login se sem
-  token; telas do painel exigem sessão) e shell com bottom nav de 5 tabs.
-- `ApiClient` (dio) com injeção de JWT e **refresh automático** em 401.
-- Tokens em `flutter_secure_storage`.
-- Tema dark com a paleta exata da seção 6 (Inter + Space Grotesk via google_fonts).
-- 4 smoke tests de widget (`test/smoke_test.dart`) — `flutter test` e
+- Camada de dados por feature (`features/*/data.dart`): repositories + providers
+  Riverpod que reagem a login/logout.
+- `ApiClient` com refresh de JWT **single-flight** e persistência do refresh token
+  rotacionado (backend usa ROTATE_REFRESH_TOKENS + blacklist — vários 401
+  simultâneos compartilham uma renovação; falha de rede não desloga).
+- Telas fora do MVP (profissional, chat, plano atribuído, explorar templates)
+  preservadas em `features/`, sem rota.
+- 4 testes de widget com providers sobrescritos (dados fake) — `flutter test` e
   `flutter analyze` limpos.
 
 ## O que falta / decisões pendentes
 
-1. **Dados reais**: só auth consome o backend. Endpoints de vínculo profissional
-   (2026-07-02) e de dieta completa (2026-07-03: `/diet/foods/?q=`,
-   `/diet/meal-plans/`, `/diet/meals/{id}/mark-done/`, atribuição de dieta) já
-   existem — "Aceitar Convite", "Plano Atribuído" e toda a aba Dieta têm API real
-   para consumir. Treinos, dieta, evolução, bioimpedância,
-   profissionais e chat usam `lib/mock/mock_data.dart` (mesmo racional do painel web).
-   Ao integrar, criar `data/domain` por feature mantendo os shapes do mock.
-2. ~~Endpoint de cadastro~~ **Resolvido (2026-07-02)**: contrato validado contra o
-   backend real — envia `{account_type, first_name, last_name, email, password}` e
-   aproveita os tokens que o register já retorna (sem segundo login). Register e
-   login testados via curl contra o Django + Postgres locais.
-3. **Offline-first (README 5.4 — regra crítica)**: Hive + connectivity_plus +
-   `resume_pending_session` ainda não implementados; a execução de treino hoje é
-   estado em memória. Entra junto com a integração da API de sessões.
-4. **Pacotes do README ainda não adicionados** (decisão consciente para a fase
-   UI-first, adicionar quando a funcionalidade correspondente entrar):
-   freezed/riverpod_generator (codegen — providers hoje são manuais, ainda Riverpod
-   2.x), hive, fl_chart (gráfico atual é CustomPainter próprio, mesma decisão do
-   web), firebase_messaging, flutter_local_notifications, connectivity_plus,
+1. **Offline-first (README 5.4 — regra crítica)**: sessão de treino ainda é estado
+   em memória (risco aceito na demo — ver MVP.md). Hive + connectivity_plus +
+   `resume_pending_session` entram depois da demo.
+2. **Alimento customizado**: endpoint existe (`POST /diet/foods/`), UI de criação
+   ainda não exposta na busca.
+3. **Fora da demo** (telas prontas, sem rota): vínculo profissional, plano
+   atribuído, chat, explorar templates. Reordenar exercícios (drag & drop) não
+   implementado.
+4. **Pacotes do README ainda não adicionados**: freezed/riverpod_generator, hive,
+   fl_chart, firebase_messaging, flutter_local_notifications, connectivity_plus,
    sentry_flutter, image_picker, permission_handler.
-5. **Reordenar exercícios (drag & drop)** na execução ainda não implementado.
-6. **Recuperação de senha** é só UI (backend não tem endpoint de reset ainda).
-7. **Login com Google** — botão presente (protótipo), sem implementação; não está nos
-   PDFs como requisito de MVP, decidir se fica.
-8. Cobertura de testes mínima de 50% (RNF07) — hoje só smoke tests.
-9. ~~Build APK~~ **Resolvido**: `flutter build apk --debug` gera
-   `build/app/outputs/flutter-apk/app-debug.apk` com sucesso (validado 2026-07-02).
-   `flutter doctor` ainda aponta `cmdline-tools`/licenças como warning, sem bloquear.
+5. Reset de senha e login Google são só UI.
+6. Cobertura de testes mínima de 50% (RNF07) — 4 testes de widget hoje.
+7. Erro de auth fica na tela ao navegar login↔cadastro (estado compartilhado do
+   AuthController — limpar ao trocar de tela).
+8. Distribuição da demo: para testers fora da rede local, falta subir o backend
+   (Railway/Render) e gerar APK com a URL pública.
 
 ## Decisões/simplificações tomadas
 
