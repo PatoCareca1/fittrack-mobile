@@ -67,6 +67,33 @@ notebook — necessário para o **celular físico**. Para usar apenas o emulador
 `runserver` simples (localhost) basta. `ALLOWED_HOSTS` já está liberado em
 `config/settings/dev.py` para dev.
 
+### 0.5. Instalar Flutter + Android SDK (1ª vez nesta máquina)
+
+Manjaro/Arch — via `pacman` + AUR (`yay`), sem precisar do Android Studio:
+
+```bash
+sudo pacman -S --needed android-tools jdk17-openjdk android-udev
+yay -S flutter-bin android-sdk-cmdline-tools-latest   # AUR, binários pré-compilados
+sudo chown -R $USER:$USER /opt/android-sdk            # cmdline-tools instala como root
+sudo usermod -aG adbusers $USER                        # relogar (ou novo terminal) depois
+
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export ANDROID_HOME=/opt/android-sdk
+export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+# persistir essas 3 linhas no ~/.zshrc (ou ~/.bashrc)
+
+yes | sdkmanager --licenses
+sdkmanager "platforms;android-36" "build-tools;36.0.0"  # versões que o Flutter pede
+```
+
+Nota: `yay -S` pode disparar uma compilação enorme e desnecessária de `webkit2gtk`
+(dependência opcional de outro pacote em cache, não do Flutter) — se aparecer uma
+sequência longa de `clang++`, é seguro `Ctrl+C` nesse processo e seguir; `flutter-bin`
+em si é só binário pré-compilado, instala em segundos.
+
+`flutter doctor` deve reportar o Android toolchain OK depois disso (JDK 17 é
+necessário porque o Gradle/AGP do template atual não suporta JDKs mais novos, ex. 26).
+
 ### 1. Preparar o app (1ª vez)
 
 ```bash
@@ -84,6 +111,11 @@ flutter run                              # compila e instala no emulador
 
 Não precisa configurar URL: o default `http://10.0.2.2:8000/api/v1` já aponta para
 o `localhost` do notebook visto de dentro do emulador.
+
+Requer aceleração de hardware (KVM): confira `ls /dev/kvm` — se não existir, o
+suporte à virtualização (SVM/AMD-V ou VT-x) provavelmente está desabilitado na
+BIOS, e o emulador roda lento demais para ser usável. Nesse caso use os passos 3/3.5
+(celular físico) em vez do emulador.
 
 ### 3. Rodar no celular físico (USB)
 
@@ -109,6 +141,31 @@ Notas:
   (usar "Transferência de arquivos"/PTP, não "Só carregar") e rode `adb devices`.
 - Firewall do notebook precisa aceitar entrada na porta 8000
   (`sudo ufw allow 8000` se usar ufw).
+
+### 3.5. Alternativa ao cabo USB: Wireless debugging (Wi-Fi)
+
+Útil quando o notebook não tem porta compatível com o cabo do celular (ex.: notebook
+sem USB-C). Requer Android 11+ e o celular na mesma rede do notebook — o notebook
+pode estar na LAN por cabo (não precisa Wi-Fi nele), desde que fique na mesma
+sub-rede/roteador do celular.
+
+1. No celular: **Opções do desenvolvedor → Depuração sem fio** → ativar.
+2. Toque em **"Parear dispositivo com código de pareamento"** → anote o IP:porta e
+   o código de 6 dígitos exibidos (validade curta, ~1 min — mantenha a tela aberta).
+3. No notebook, pareie assim que tiver os dados:
+   ```bash
+   adb pair <ip>:<porta-de-pareamento> <código>
+   ```
+4. Volte à tela principal de Depuração sem fio — o IP:porta ali (porta de conexão,
+   diferente da de pareamento) é o que se usa para conectar:
+   ```bash
+   adb connect <ip>:<porta-de-conexão>
+   flutter devices                          # o celular deve aparecer na lista
+   flutter run -d <ip>:<porta-de-conexão> --dart-define=API_BASE_URL=http://SEU_IP:8000/api/v1
+   ```
+
+O pareamento (passo 3) persiste entre reinícios do celular; só repita o `adb connect`
+(passo 4) se a porta de conexão mudar (costuma mudar ao desligar/religar o Wi-Fi).
 
 ### 4. Alternativa sem cabo: instalar o APK
 

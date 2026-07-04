@@ -1,6 +1,6 @@
 # Progress — fittrack-mobile
 
-Última atualização: 2026-07-03
+Última atualização: 2026-07-04
 
 ## Papel deste repo
 
@@ -9,6 +9,17 @@ App mobile Android (Flutter) do FitTrack. Ver `README.md` local e o README raiz 
 **Escopo da demo em andamento: ver `MVP.md`.**
 
 ## O que já está pronto
+
+**Ambiente rodando ponta a ponta em celular físico real** (2026-07-04) — máquina de
+dev não tinha Flutter/Android SDK nem KVM habilitado (BIOS com SVM/AMD-V desligado,
+sem `/dev/kvm`, então **emulador não é opção nesta máquina** até habilitar na BIOS).
+Ambiente montado do zero: Flutter + Android SDK cmdline-tools via `pacman`/AUR
+(`flutter-bin`, `android-sdk-cmdline-tools-latest`), JDK 17 (Gradle/AGP do template
+atual não suporta JDK mais novo), `android-udev` para o `adb` funcionar sem root.
+App rodado no celular (Galaxy S24+) via **Wireless debugging** (adb pair/connect por
+Wi-Fi) — sem cabo USB, útil porque o notebook não tem porta USB-C compatível com o
+cabo disponível. Passo a passo completo nos READMEs (backend e mobile, seção
+"Rodando"). Validado pelo usuário direto no celular.
 
 **MVP demo funcional ponta a ponta contra a API real** (2026-07-03) — cadastro →
 dados físicos (meta calórica calculada) → dieta real (refeições, busca TACO,
@@ -46,8 +57,11 @@ Infra:
 6. Cobertura de testes mínima de 50% (RNF07) — 4 testes de widget hoje.
 7. Erro de auth fica na tela ao navegar login↔cadastro (estado compartilhado do
    AuthController — limpar ao trocar de tela).
-8. Distribuição da demo: para testers fora da rede local, falta subir o backend
-   (Railway/Render) e gerar APK com a URL pública.
+8. Distribuição da demo: para testers fora da rede local (ou pra não depender do PC
+   ligado), falta subir o backend hospedado e gerar APK com a URL pública. Opção
+   recomendada para teste (grátis, sem cartão): **Render.com** (web service + Postgres
+   free — web dorme após ~15min inativo, cold start ~30-50s; Postgres free expira em
+   90 dias). Alternativa: Fly.io (cota free maior, config mais manual via `fly.toml`).
 
 ## Decisões/simplificações tomadas
 
