@@ -96,7 +96,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             ExecutionScreen(workoutId: int.parse(state.pathParameters['id']!)),
       ),
-      GoRoute(path: '/chat', builder: (_, _) => const ChatScreen()),
+      GoRoute(
+        path: '/chat',
+        builder: (_, state) =>
+            ChatScreen(initialMessage: state.uri.queryParameters['initial']),
+      ),
       GoRoute(
         path: '/dieta/buscar',
         builder: (_, state) => FoodSearchScreen(

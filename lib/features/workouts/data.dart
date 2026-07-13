@@ -49,6 +49,7 @@ class WorkoutExerciseModel {
     required this.order,
     required this.sets,
     this.reps,
+    this.durationSeconds,
     this.loadKg,
     required this.restSeconds,
   });
@@ -58,10 +59,14 @@ class WorkoutExerciseModel {
   final int order;
   final int sets;
   final int? reps;
+  final int? durationSeconds;
   final double? loadKg;
   final int restSeconds;
 
-  String get scheme => '$sets×${reps ?? "-"}';
+  /// "3×10" para exercícios por repetição, "3×30s" para exercícios por
+  /// tempo (prancha, etc.) — o agente de treino do Coach pode gerar os dois.
+  String get scheme =>
+      durationSeconds != null ? '$sets×${durationSeconds}s' : '$sets×${reps ?? "-"}';
   String get loadLabel =>
       loadKg == null ? 'livre' : '${loadKg!.toStringAsFixed(loadKg! % 1 == 0 ? 0 : 1)}kg';
 
@@ -73,6 +78,7 @@ class WorkoutExerciseModel {
         order: json['order'] as int,
         sets: json['sets'] as int,
         reps: json['reps'] as int?,
+        durationSeconds: json['duration_seconds'] as int?,
         loadKg: json['load_kg'] == null ? null : double.parse('${json['load_kg']}'),
         restSeconds: json['rest_seconds'] as int? ?? 60,
       );

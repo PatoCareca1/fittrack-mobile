@@ -62,17 +62,29 @@ class MyWorkoutsScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: const Column(children: [
-                      Icon(Icons.fitness_center,
+                    child: Column(children: [
+                      const Icon(Icons.fitness_center,
                           size: 40, color: AppColors.textMuted),
-                      SizedBox(height: 12),
-                      Text('Nenhum treino ainda',
+                      const SizedBox(height: 12),
+                      const Text('Nenhum treino ainda',
                           style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w700)),
-                      SizedBox(height: 4),
-                      Text('Crie seu primeiro treino abaixo',
+                      const SizedBox(height: 4),
+                      const Text('Crie seu primeiro treino abaixo',
                           style: TextStyle(
                               fontSize: 13, color: AppColors.textSecondary)),
+                      const SizedBox(height: 16),
+                      PillButton(
+                        label: 'Montar meu treino com o assistente',
+                        icon: Icons.smart_toy_outlined,
+                        height: 46,
+                        onPressed: () => context.push(Uri(
+                          path: '/chat',
+                          queryParameters: {
+                            'initial': 'Monte um treino novo para mim.',
+                          },
+                        ).toString()),
+                      ),
                     ]),
                   )
                 else

@@ -11,6 +11,7 @@ import '../../core/widgets/widgets.dart';
 import '../body_metrics/data.dart';
 import '../diet/data.dart';
 import '../coach/data.dart';
+import '../workouts/data.dart';
 
 const _pollInterval = Duration(seconds: 2);
 const _pollTimeout = Duration(minutes: 3);
@@ -60,6 +61,19 @@ class _PlanResultItem extends _ChatItem {
   final List<CoachIssue> warnings;
 }
 
+class _WorkoutResultItem extends _ChatItem {
+  const _WorkoutResultItem({
+    required this.workout,
+    this.summary,
+    this.criticSummary,
+    this.warnings = const [],
+  });
+  final WorkoutModel workout;
+  final WorkoutPlanSummary? summary;
+  final String? criticSummary;
+  final List<CoachIssue> warnings;
+}
+
 /// Pipeline rodou até o fim mas o plano foi reprovado — não é erro.
 class _RejectedResultItem extends _ChatItem {
   const _RejectedResultItem({
@@ -84,10 +98,15 @@ class _TimeoutResultItem extends _ChatItem {
 }
 
 /// Chat com o FitTrack Coach (IA). Envia mensagem, roteia via
-/// `/coach/messages/` e, para pedido de dieta, faz polling do job até
-/// aprovar, reprovar ou falhar.
+/// `/coach/messages/` e, para pedido de dieta ou treino, faz polling do job
+/// até aprovar, reprovar ou falhar.
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.initialMessage});
+
+  /// Mensagem enviada automaticamente ao abrir a tela — usada pelos pontos
+  /// de entrada "Montar com o assistente" (dieta/treino), que já chegam com
+  /// a intenção do aluno em vez de exigir digitar de novo.
+  final String? initialMessage;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -135,6 +154,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           });
           _scrollToBottom();
         }
+        _sendInitialMessageIfAny();
         return;
       } catch (_) {
         // Conversa local pode ter sido apagada/pertencer a outra sessão —
@@ -143,6 +163,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
     if (mounted) setState(() => _loadingHistory = false);
+    _sendInitialMessageIfAny();
+  }
+
+  void _sendInitialMessageIfAny() {
+    final initial = widget.initialMessage?.trim();
+    if (initial == null || initial.isEmpty) return;
+    _send(initial);
   }
 
   _ChatItem _itemFromMessage(CoachMessageModel m) => m.isMine
@@ -235,12 +262,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (job.isApproved) {
       _pollTimer?.cancel();
-      _resolvePending((_) => _PlanResultItem(
-            plan: job.mealPlan!,
-            totals: job.totals ?? const Macros(),
-            criticSummary: job.criticSummary,
-            warnings: job.issues.where((i) => !i.isBlocker).toList(),
-          ));
+      final warnings = job.issues.where((i) => !i.isBlocker).toList();
+      _resolvePending((_) => job.mealPlan != null
+          ? _PlanResultItem(
+              plan: job.mealPlan!,
+              totals: job.totals ?? const Macros(),
+              criticSummary: job.criticSummary,
+              warnings: warnings,
+            )
+          : _WorkoutResultItem(
+              workout: job.workout!,
+              summary: job.summary,
+              criticSummary: job.criticSummary,
+              warnings: warnings,
+            ));
     } else if (job.isRejected) {
       _pollTimer?.cancel();
       _resolvePending((pending) => _RejectedResultItem(
@@ -328,6 +363,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             _textBubble(text: text, time: time, mine: false),
                           final _PendingJobItem item => _pendingBubble(item),
                           final _PlanResultItem item => _planCard(item),
+                          final _WorkoutResultItem item => _workoutCard(item),
                           final _RejectedResultItem item => _rejectedCard(item),
                           final _FailedResultItem item => _failedCard(
                               title: 'Não foi possível gerar o plano',
@@ -551,6 +587,103 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Widget _workoutCard(_WorkoutResultItem item) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .86),
+        child: FtCard(
+          borderColor: AppColors.primaryDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(children: [
+                Icon(Icons.check_circle, color: AppColors.primary, size: 18),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text('Treino gerado',
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              for (final exercise in item.workout.exercises)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(children: [
+                    const Icon(Icons.fitness_center, size: 14, color: AppColors.textMuted),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${exercise.exercise.name} · ${exercise.scheme}',
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ]),
+                ),
+              if (item.summary != null) ...[
+                const SizedBox(height: 8),
+                _WorkoutSummaryRow(summary: item.summary!),
+              ],
+              if (item.warnings.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                for (final warning in item.warnings)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(warning.message,
+                              style: const TextStyle(
+                                  fontSize: 11.5, color: AppColors.textMuted)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              if ((item.criticSummary ?? '').isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardAlt,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.rate_review_outlined,
+                          size: 14, color: AppColors.blueAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(item.criticSummary!,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.textSecondary)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              PillButton(
+                label: 'Ver treino completo',
+                height: 42,
+                onPressed: () {
+                  ref.invalidate(workoutsProvider);
+                  context.go('/treinos');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _rejectedCard(_RejectedResultItem item) {
     final reasons = [
       ...item.issues.map((i) => i.message),
@@ -715,6 +848,36 @@ class _MacroTotalsRow extends StatelessWidget {
           goal == null ? '$value$suffix' : '$value$suffix / $goal$suffix',
           style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
+      ],
+    );
+  }
+}
+
+class _WorkoutSummaryRow extends StatelessWidget {
+  const _WorkoutSummaryRow({required this.summary});
+
+  final WorkoutPlanSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 16,
+      runSpacing: 6,
+      children: [
+        _item('Exercícios', '${summary.exerciseCount}'),
+        _item('Séries totais', '${summary.totalSets}'),
+        if (summary.muscleGroups.isNotEmpty)
+          _item('Grupos', summary.muscleGroups.join(', ')),
+      ],
+    );
+  }
+
+  Widget _item(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+        Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
       ],
     );
   }

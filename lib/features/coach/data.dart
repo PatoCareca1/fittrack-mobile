@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../auth/providers.dart';
 import '../diet/data.dart';
+import '../workouts/data.dart';
 
 /// Issue reportada pelo agente crítico (`severity`: "blocker" ou "warning").
 class CoachIssue {
@@ -46,16 +47,39 @@ class SendMessageResult {
       );
 }
 
-/// Resultado de `GET /coach/jobs/{id}/`. `mealPlan` só vem preenchido quando
-/// o plano foi aprovado e persistido — `succeeded` sem `mealPlan` é uma
-/// reprovação normal do pipeline, não um erro de sistema.
+/// Resumo de um treino gerado pelo Coach (equivalente a `Macros` da dieta,
+/// mas treino não tem alvo numérico — só contagem/estrutura).
+class WorkoutPlanSummary {
+  const WorkoutPlanSummary({
+    required this.exerciseCount,
+    required this.totalSets,
+    this.muscleGroups = const [],
+  });
+
+  final int exerciseCount;
+  final int totalSets;
+  final List<String> muscleGroups;
+
+  factory WorkoutPlanSummary.fromJson(Map<String, dynamic> json) => WorkoutPlanSummary(
+        exerciseCount: json['exercise_count'] as int? ?? 0,
+        totalSets: json['total_sets'] as int? ?? 0,
+        muscleGroups: (json['muscle_groups'] as List? ?? []).map((g) => '$g').toList(),
+      );
+}
+
+/// Resultado de `GET /coach/jobs/{id}/`. `mealPlan`/`workout` só vem
+/// preenchido quando o respectivo plano foi aprovado e persistido —
+/// `succeeded` sem nenhum dos dois é uma reprovação normal do pipeline, não
+/// um erro de sistema.
 class CoachJobResult {
   const CoachJobResult({
     required this.id,
     required this.status,
     required this.error,
     this.mealPlan,
+    this.workout,
     this.totals,
+    this.summary,
     this.criticSummary,
     this.issues = const [],
     this.errors = const [],
@@ -65,15 +89,17 @@ class CoachJobResult {
   final String status; // pending | running | succeeded | failed
   final String error;
   final MealPlanModel? mealPlan;
+  final WorkoutModel? workout;
   final Macros? totals;
+  final WorkoutPlanSummary? summary;
   final String? criticSummary;
   final List<CoachIssue> issues;
   final List<String> errors;
 
   bool get isPending => status == 'pending' || status == 'running';
   bool get isFailed => status == 'failed';
-  bool get isApproved => status == 'succeeded' && mealPlan != null;
-  bool get isRejected => status == 'succeeded' && mealPlan == null;
+  bool get isApproved => status == 'succeeded' && (mealPlan != null || workout != null);
+  bool get isRejected => status == 'succeeded' && mealPlan == null && workout == null;
 
   factory CoachJobResult.fromJson(Map<String, dynamic> json) => CoachJobResult(
         id: json['id'] as int,
@@ -82,9 +108,15 @@ class CoachJobResult {
         mealPlan: json['meal_plan'] == null
             ? null
             : MealPlanModel.fromJson(json['meal_plan'] as Map<String, dynamic>),
+        workout: json['workout'] == null
+            ? null
+            : WorkoutModel.fromJson(json['workout'] as Map<String, dynamic>),
         totals: json['totals'] == null
             ? null
             : Macros.fromJson(json['totals'] as Map<String, dynamic>),
+        summary: json['summary'] == null
+            ? null
+            : WorkoutPlanSummary.fromJson(json['summary'] as Map<String, dynamic>),
         criticSummary: json['critic_summary'] as String?,
         issues: (json['issues'] as List? ?? [])
             .map((i) => CoachIssue.fromJson(i as Map<String, dynamic>))
