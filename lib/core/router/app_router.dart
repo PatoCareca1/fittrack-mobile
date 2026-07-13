@@ -9,6 +9,7 @@ import '../../features/auth/screens/recover_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/body_metrics/screens/bioimpedance_screen.dart';
 import '../../features/body_metrics/screens/evolution_screen.dart';
+import '../../features/chat/chat_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/diet/screens/food_search_screen.dart';
 import '../../features/diet/screens/meal_detail_screen.dart';
@@ -23,8 +24,9 @@ import '../../features/workouts/screens/workout_detail_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/widgets.dart';
 
-// Fora da demo (MVP.md): vínculo profissional, plano atribuído, chat e
-// explorar templates — telas preservadas em features/, sem rota.
+// Fora da demo (MVP.md): vínculo profissional, plano atribuído e explorar
+// templates — telas preservadas em features/, sem rota. Chat (FitTrack
+// Coach/IA) tem rota própria abaixo — ligado ao apps/coach do backend.
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ValueNotifier<AuthStatus>(AuthStatus.unknown);
@@ -94,6 +96,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             ExecutionScreen(workoutId: int.parse(state.pathParameters['id']!)),
       ),
+      GoRoute(path: '/chat', builder: (_, _) => const ChatScreen()),
       GoRoute(
         path: '/dieta/buscar',
         builder: (_, state) => FoodSearchScreen(
