@@ -1,8 +1,9 @@
 .PHONY: help install run devices test build doctor clean guard-flutter
 
-# Sobrescreva o binário se o flutter não estiver no PATH:
-#   make run FLUTTER=~/flutter/bin/flutter
-FLUTTER ?= flutter
+# Resolve o binário do flutter: usa o do PATH se existir; senão cai no SDK local
+# (~/sdk/flutter — instalação padrão desta máquina). Sobrescreva se precisar:
+#   make run FLUTTER=/caminho/para/flutter
+FLUTTER ?= $(shell command -v flutter 2>/dev/null || echo $$HOME/sdk/flutter/bin/flutter)
 DEVICE  ?=
 
 guard-flutter:
