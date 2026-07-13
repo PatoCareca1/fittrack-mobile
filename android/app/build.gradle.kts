@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "br.com.fittrack.fittrack"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Fixado (não flutter.ndkVersion) — flutter_secure_storage e path_provider_android
+    // exigem 27.0.12077973; a versão do template do Flutter (26.x) gerava warning no build.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
